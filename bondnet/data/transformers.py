@@ -206,6 +206,10 @@ class HeteroGraphFeatureStandardScaler:
         # standardize
         if self._mean is not None and self._std is not None:
             for nt in node_types:
+                # print(nt)
+                # print(torch.cat(node_feats[nt]).shape)
+                # print(self._mean[nt])
+                # print(self._std[nt])
                 feats = (torch.cat(node_feats[nt]) - self._mean[nt]) / self._std[nt]
                 node_feats[nt] = feats
 

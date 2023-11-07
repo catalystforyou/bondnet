@@ -684,6 +684,122 @@ class AtomFeaturizerFull(BaseFeaturizer):
         return {"feat": feats}
 
 
+class AtomFeaturizerMechanism(BaseFeaturizer):
+    """
+    Featurize atoms in a molecule.
+
+    The atom indices will be preserved, i.e. feature i corresponds to atom i.
+    """
+
+    def __call__(self, mol, **kwargs):
+        """
+        Parameters
+        ----------
+        mol : rdkit.Chem.rdchem.Mol
+            RDKit molecule object
+
+        Returns
+        -------
+            Dictionary for atom features
+        """
+        try:
+            species = sorted(kwargs["dataset_species"])
+        except KeyError as e:
+            raise KeyError(
+                "{} `dataset_species` needed for {}.".format(e, self.__class__.__name__)
+            )
+
+        feats = []
+        is_donor = defaultdict(int)
+        is_acceptor = defaultdict(int)
+
+        fdef_name = os.path.join(RDConfig.RDDataDir, "BaseFeatures.fdef")
+        mol_featurizer = ChemicalFeatures.BuildFeatureFactory(fdef_name)
+        mol_feats = mol_featurizer.GetFeaturesForMol(mol)
+
+        for i in range(len(mol_feats)):
+            if mol_feats[i].GetFamily() == "Donor":
+                node_list = mol_feats[i].GetAtomIds()
+                for u in node_list:
+                    is_donor[u] = 1
+            elif mol_feats[i].GetFamily() == "Acceptor":
+                node_list = mol_feats[i].GetAtomIds()
+                for u in node_list:
+                    is_acceptor[u] = 1
+
+        ring = mol.GetRingInfo()
+        allowed_ring_size = [3, 4, 5, 6, 7]
+        num_atoms = mol.GetNumAtoms()
+        for u in range(num_atoms):
+            ft = [is_acceptor[u], is_donor[u]]
+
+            atom = mol.GetAtomWithIdx(u)
+
+            ft.append(atom.GetDegree())
+            ft.append(atom.GetTotalDegree())
+
+            # ft.append(atom.GetExplicitValence())
+            # ft.append(atom.GetImplicitValence())
+            ft.append(atom.GetTotalValence())
+
+            ft.append(atom.GetFormalCharge())
+            ft.append(atom.GetNumRadicalElectrons())
+
+            ft.append(int(atom.GetIsAromatic()))
+            ft.append(int(atom.IsInRing()))
+
+            # ft.append(atom.GetNumExplicitHs())
+            # ft.append(atom.GetNumImplicitHs())
+            ft.append(atom.GetTotalNumHs(includeNeighbors=True))
+
+            # ft.append(atom.GetAtomicNum())
+            ft += one_hot_encoding(atom.GetSymbol(), species)
+
+            ft += one_hot_encoding(
+                atom.GetHybridization(),
+                [
+                    Chem.rdchem.HybridizationType.S,
+                    Chem.rdchem.HybridizationType.SP,
+                    Chem.rdchem.HybridizationType.SP2,
+                    Chem.rdchem.HybridizationType.SP3,
+                    Chem.rdchem.HybridizationType.SP3D,
+                    Chem.rdchem.HybridizationType.SP3D2,
+                ],
+            )
+
+            for s in allowed_ring_size:
+                ft.append(ring.IsAtomInRingOfSize(u, s))
+
+            feats.append(ft)
+
+        feats = torch.tensor(feats, dtype=getattr(torch, self.dtype))
+        self._feature_size = feats.shape[1]
+        self._feature_name = (
+            [
+                "acceptor",
+                "donor",
+                "degree",
+                "total degree",
+                # "explicit valence",
+                # "implicit valence",
+                "total valence",
+                "formal charge",
+                "num radical electrons",
+                "is aromatic",
+                "is in ring",
+                # "num explicit H",
+                # "num implicit H",
+                "num total H",
+                # "atomic number",
+            ]
+            + ["chemical symbol"] * len(species)
+            + ["hybridization"] * 6
+            + ["ring size"] * 5
+        )
+
+        return {"feat": feats}
+
+
 class GlobalFeaturizer(BaseFeaturizer):
     """
     Featurize the global state of a molecules using number of atoms, number of bonds,

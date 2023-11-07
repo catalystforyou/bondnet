@@ -196,6 +196,47 @@ class PredictionOneReactant(BasePrediction):
 
         return reactions
 
+    def get_bond_dict(self, predictions):
+        
+        # group prediction by bond
+        predictions_by_bond = defaultdict(list)
+        for i, p in enumerate(predictions):
+            bond = self.rxn_idx_to_bond_map[i]
+            predictions_by_bond[bond].append(p)
+
+        # obtain smallest energy for each bond across charge
+        for bond, pred in predictions_by_bond.items():
+            pred = [p for p in pred if p is not None]
+            # all prediction of the same bond across charges are None
+            if not pred:
+                predictions_by_bond[bond] = None
+            # at least one value is not None
+            else:
+                predictions_by_bond[bond] = min(pred)
+
+        # create prediction and failing info for all bonds
+        all_predictions = dict()
+        all_failed = dict()
+        for bond, (compute, fail, reason) in self.no_result_reason.items():
+
+            if not compute:
+                all_predictions[bond] = None
+
+            # failed at conversion to wrapper mol stage
+            elif fail:
+                all_failed[bond] = reason
+                all_predictions[bond] = None
+
+            else:
+                pred = predictions_by_bond[bond]
+
+                # failed at prediction stage
+                if pred is None:
+                    all_failed[bond] = "cannot convert to dgl graph"
+
+                all_predictions[bond] = pred
+        return all_predictions
+
     def write_results(self, predictions, figure_name, to_stdout=False):
 
         # group prediction by bond

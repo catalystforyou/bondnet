@@ -12,6 +12,7 @@ from bondnet.data.grapher import HeteroMoleculeGraph
 from bondnet.data.featurizer import (
     AtomFeaturizerMinimum,
     AtomFeaturizerFull,
+    AtomFeaturizerMechanism,
     BondAsNodeFeaturizerMinimum,
     BondAsNodeFeaturizerFull,
     GlobalFeaturizer,
@@ -29,6 +30,7 @@ from bondnet.utils import (
 MODEL_INFO = {
     "bdncm": {"date": ["20200808"]},  # default to the last (should be the latest)
     "pubchem": {"date": ["20200810"]},
+    "mechanism": {"date": ["20231009"]},
 }
 
 GOOGLE_DRIVE_MODEL_INFO = {
@@ -141,7 +143,7 @@ def load_model(model_path, pretrained=True):
     if pretrained:
         load_checkpoints(
             {"model": model},
-            map_location=torch.device("cpu"),
+            map_location=torch.device("cuda:0"),
             filename=model_path.joinpath("checkpoint.pkl"),
         )
 
@@ -200,6 +202,9 @@ def _check_species(molecules, state_dict_filename):
         mols = molecules
 
     species = get_dataset_species(mols)
+    
+    # print(torch.load(str(state_dict_filename)))
+
 
     supported_species = torch.load(str(state_dict_filename))["species"]
     not_supported = []
@@ -240,7 +245,6 @@ def _check_charge(model_path, features):
 def _get_grapher(model_path):
     model_info = get_model_info(model_path)
     allowed_charge = model_info["allowed_charge"]
-
     featurizer_set = model_info["featurizer_set"]
 
     if featurizer_set == "full":
@@ -263,6 +267,11 @@ def _get_grapher(model_path):
             allowed_charges=allowed_charge,
             solvent_environment=["smd_thf", "smd_7.23,1.4097,0,0.859,36.83,0.00,0.00"],
         )
+
+    elif featurizer_set == "mechanism":
+        atom_featurizer = AtomFeaturizerMechanism()
+        bond_featurizer = BondAsNodeFeaturizerFull(length_featurizer=None, dative=False)
+        global_featurizer = GlobalFeaturizer(allowed_charges=allowed_charge)
 
     else:
         raise ValueError(

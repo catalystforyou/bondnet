@@ -138,6 +138,7 @@ class GatedGCNConv(nn.Module):
         """
 
         g = g.local_var()
+        g = g.to(feats["atom"].device)
 
         h = feats["atom"]
         e = feats["bond"]

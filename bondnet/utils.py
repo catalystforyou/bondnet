@@ -173,7 +173,7 @@ def save_checkpoints(
         objects[k] = obj.state_dict()
     torch.save(objects, filename)
     if is_best:
-        shutil.copyfile(filename, "best_checkpoint.pkl")
+        shutil.copyfile(filename, "/home/v-junrenli/mechanism/bondnet/bondnet/prediction/pretrained/mechanism/20231009/best_checkpoint.pkl")
         if msg is not None:
             logger.info(msg)
 

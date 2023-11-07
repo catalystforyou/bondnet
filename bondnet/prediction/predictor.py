@@ -20,11 +20,13 @@ def predict_single_molecule(
     model_name,
     molecule,
     charge=0,
-    ring_bond=False,
+    ring_bond=True,
     one_per_iso_bond_group=True,
     write_result=False,
     figure_name="prediction.png",
     format=None,
+    # output='dict',
+    output=None
 ):
     """
     Make predictions for a single molecule.
@@ -91,6 +93,8 @@ def predict_single_molecule(
         model_path, unit_converter, molecules, labels, extra_features
     )
 
+    if output == 'dict':
+        return predictor.get_bond_dict(predictions)
     return predictor.write_results(predictions, figure_name, write_result)
 
 
@@ -200,6 +204,7 @@ def predict_by_struct_label_extra_feats_files(
 def get_prediction(model_path, unit_converter, molecules, labels, extra_features):
 
     model = load_model(model_path)
+    model = model.to('cuda:0')
     dataset = load_dataset(model_path, molecules, labels, extra_features)
     data_loader = DataLoaderReactionNetwork(dataset, batch_size=100, shuffle=False)
 
@@ -225,7 +230,7 @@ def get_prediction(model_path, unit_converter, molecules, labels, extra_features
     return predictions
 
 
-def evaluate(model, nodes, data_loader, device=None):
+def evaluate(model, nodes, data_loader, device='cuda:0'):
     model.eval()
 
     predictions = []
@@ -233,10 +238,11 @@ def evaluate(model, nodes, data_loader, device=None):
 
         for it, (bg, label) in enumerate(data_loader):
             feats = {nt: bg.nodes[nt].data["feat"] for nt in nodes}
+            # print(feats['atom'][0])
             norm_atom = label["norm_atom"]
             norm_bond = label["norm_bond"]
-            mean = label["scaler_mean"]
-            stdev = label["scaler_stdev"]
+            mean = label["scaler_mean"].to(device)
+            stdev = label["scaler_stdev"].to(device)
 
             if device is not None:
                 feats = {k: v.to(device) for k, v in feats.items()}
@@ -245,8 +251,10 @@ def evaluate(model, nodes, data_loader, device=None):
 
             pred = model(bg, feats, label["reaction"], norm_atom, norm_bond)
             pred = pred.view(-1)
-            pred = (pred * stdev + mean).cpu().numpy()
+            # print(pred.device, stdev.device, mean.device)
 
+            pred = (pred * stdev + mean).cpu().numpy()
+            # print(pred)
             predictions.append(pred)
 
     predictions = np.concatenate(predictions)

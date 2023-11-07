@@ -20,6 +20,8 @@ from bondnet.data.featurizer import (
     AtomFeaturizerFull,
     BondAsNodeFeaturizerFull,
     GlobalFeaturizer,
+    AtomFeaturizerMinimum, 
+    AtomFeaturizerMechanism,
 )
 from bondnet.scripts.create_label_file import read_input_files
 from bondnet.utils import (
@@ -38,42 +40,42 @@ def parse_args():
 
     # input files
     parser.add_argument("--molecule_file", type=str,
-                        default='examples/train/molecules.sdf')
+                        default='mechanism/molecules.sdf')
     parser.add_argument("--molecule_attributes_file", type=str,
-                        default='examples/train/molecule_attributes.yaml')
+                        default='mechanism/charges.yaml')
     parser.add_argument("--reaction_file", type=str,
-                        default='examples/train/reactions.yaml')
+                        default='mechanism/reactions.yaml')
 
     # embedding layer
-    parser.add_argument("--embedding-size", type=int, default=24)
+    parser.add_argument("--embedding-size", type=int, default=64)
 
     # gated layer
-    parser.add_argument("--gated-num-layers", type=int, default=3)
-    parser.add_argument("--gated-hidden-size", type=int, nargs="+", default=[64, 64, 64])
+    parser.add_argument("--gated-num-layers", type=int, default=5)
+    parser.add_argument("--gated-hidden-size", type=int, nargs="+", default=[192, 384, 512, 384, 192])
     parser.add_argument("--gated-num-fc-layers", type=int, default=2)
     parser.add_argument("--gated-graph-norm", type=int, default=0)
     parser.add_argument("--gated-batch-norm", type=int, default=1)
     parser.add_argument("--gated-activation", type=str, default="ReLU")
     parser.add_argument("--gated-residual", type=int, default=1)
-    parser.add_argument("--gated-dropout", type=float, default="0.0")
+    parser.add_argument("--gated-dropout", type=float, default="0.02")
 
     # readout layer
     parser.add_argument(
         "--num-lstm-iters",
         type=int,
-        default=6,
+        default=8,
         help="number of iterations for the LSTM in set2set readout layer",
     )
     parser.add_argument(
         "--num-lstm-layers",
         type=int,
-        default=3,
+        default=4,
         help="number of layers for the LSTM in set2set readout layer",
     )
 
     # fc layer
     parser.add_argument("--fc-num-layers", type=int, default=2)
-    parser.add_argument("--fc-hidden-size", type=int, nargs="+", default=[64, 32])
+    parser.add_argument("--fc-hidden-size", type=int, nargs="+", default=[384, 192])
     parser.add_argument("--fc-batch-norm", type=int, default=0)
     parser.add_argument("--fc-activation", type=str, default="ReLU")
     parser.add_argument("--fc-dropout", type=float, default=0.0)
@@ -90,7 +92,7 @@ def parse_args():
     )
     # gpu
     parser.add_argument(
-        "--gpu", type=int, default=None, help="GPU index. None to use CPU."
+        "--gpu", type=int, default=0, help="GPU index. None to use CPU."
     )
     parser.add_argument(
         "--distributed",
@@ -218,13 +220,14 @@ def evaluate(model, nodes, data_loader, metric_fn, device=None):
 
 
 def get_grapher():
-    atom_featurizer = AtomFeaturizerFull()
+    # atom_featurizer = AtomFeaturizerFull()
     bond_featurizer = BondAsNodeFeaturizerFull(length_featurizer=None, dative=False)
-    global_featurizer = GlobalFeaturizer(allowed_charges=None)
+    # global_featurizer = GlobalFeaturizer(allowed_charges=None)
 
     # atom_featurizer = AtomFeaturizerMinimum()
+    atom_featurizer = AtomFeaturizerMechanism()
     # bond_featurizer = BondAsNodeFeaturizerMinimum(length_featurizer=None)
-    # global_featurizer = GlobalFeaturizer(allowed_charges=[-1, 0, 1])
+    global_featurizer = GlobalFeaturizer(allowed_charges=[-1, 0, 1])
 
     grapher = HeteroMoleculeGraph(
         atom_featurizer=atom_featurizer,
@@ -378,12 +381,12 @@ def main_worker(gpu, world_size, args):
         try:
 
             if args.gpu is None:
-                checkpoint = load_checkpoints(state_dict_objs, filename="checkpoint.pkl")
+                checkpoint = load_checkpoints(state_dict_objs, filename="../prediction/pretrained/bdncm/20200808/checkpoint.pkl")
             else:
                 # Map model to be loaded to specified single gpu.
                 loc = "cuda:{}".format(args.gpu)
                 checkpoint = load_checkpoints(
-                    state_dict_objs, map_location=loc, filename="checkpoint.pkl"
+                    state_dict_objs, map_location=loc, filename="../prediction/pretrained/bdncm/20200808/checkpoint.pkl"
                 )
 
             args.start_epoch = checkpoint["epoch"]
@@ -441,6 +444,7 @@ def main_worker(gpu, world_size, args):
                 misc_objs,
                 is_best,
                 msg=f"epoch: {epoch}, score {val_acc}",
+                filename='checkpoint.pkl'
             )
 
             tt = time.time() - ti

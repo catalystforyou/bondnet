@@ -4,8 +4,9 @@ import argparse
 from bondnet.core.rdmol import read_rdkit_mols_from_file
 from bondnet.core.molwrapper import rdkit_mol_to_wrapper_mol
 from bondnet.core.reaction import Reaction
-from bondnet.core.reaction_collection import ReactionCollection
+from bondnet.core.reaction_collection import ReactionCollection, get_atom_bond_mapping
 from bondnet.utils import yaml_load
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,14 @@ def create_label_file(
     """
     molecules = _read_molecules(molecule_file, molecule_attributes_file)
     reactions = _read_reactions(molecules, reaction_file)
-    rxn_coll = ReactionCollection(reactions)
+    filtered_reactions = []
+    for idx, reaction in enumerate(tqdm(reactions)):
+        try:
+            get_atom_bond_mapping(reaction)
+            filtered_reactions.append(reaction)
+        except:
+            pass#print(idx)
+    rxn_coll = ReactionCollection(filtered_reactions)
 
     if label_file is not None:
         out = rxn_coll.create_regression_dataset_reaction_network_simple(

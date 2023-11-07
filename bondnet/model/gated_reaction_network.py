@@ -135,7 +135,10 @@ def mol_graph_to_rxn_graph(graph, feats, reactions):
     # If you really want to, use copy.deepcopy() to make a local copy
 
     # assign feats
+
+    graph = graph.to('cuda:0')
     for nt, ft in feats.items():
+        # ft = ft.to('cuda:0')
         graph.nodes[nt].data.update({"ft": ft})
 
     # unbatch molecule graph
